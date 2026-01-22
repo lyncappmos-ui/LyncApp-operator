@@ -1,0 +1,7 @@
+{
+  "name": "LyncApp MOS Operator",
+  "description": "High-contrast, offline-first field terminal for conductors and drivers to manage trips and issue tickets.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
