@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { AppState, DeviceConfig, Trip, SyncStatus, Route, ConnectionStatus } from './types';
+import { AppState, DeviceConfig, Trip, SyncStatus, Route } from './types';
 import { EventQueue } from './services/eventQueue';
 import { coreClient } from './services/coreClient';
+import { db } from './services/databaseClient';
 import Layout from './components/Layout';
 
 // Screens
@@ -19,11 +20,7 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : null;
   });
 
-  const [activeTrip, setActiveTrip] = useState<Trip | null>(() => {
-    const saved = localStorage.getItem('mos_active_trip');
-    return saved ? JSON.parse(saved) : null;
-  });
-
+  const [activeTrip, setActiveTrip] = useState<Trip | null>(null);
   const [currentScreen, setCurrentScreen] = useState<AppState>(device ? 'HOME' : 'SETUP');
   const [isInitializing, setIsInitializing] = useState(true);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({
@@ -41,26 +38,31 @@ const App: React.FC = () => {
     return unsubscribe;
   }, []);
 
-  // Handshake and Context Recovery on initialization
+  // Hybrid Handshake and Context Recovery
   useEffect(() => {
     const performHandshake = async () => {
       try {
         if (device) {
-          console.log('[App] Performing recovery with Core...');
+          // Recovery Flow: Try Core Context -> Then DB Context -> Then LocalStorage
           const context = await coreClient.fetchCore(
             (api) => api.getTerminalContext(device.operatorPhone),
+            'terminal_context',
             { activeTrip: null }
           );
           
-          if (context?.activeTrip) {
-            console.log('[App] Session recovered from Core');
-            setActiveTrip(context.activeTrip);
-            localStorage.setItem('mos_active_trip', JSON.stringify(context.activeTrip));
+          let tripToSet = context?.activeTrip;
+          
+          if (!tripToSet) {
+             tripToSet = await db.getActiveTrip();
+          }
+
+          if (tripToSet) {
+            setActiveTrip(tripToSet);
             setCurrentScreen('TICKETING');
           }
         }
       } catch (err) {
-        console.warn('[App] Recovery failed. Using local storage state.');
+        console.warn('[App] Critical Initialization Error', err);
       } finally {
         setIsInitializing(false);
       }
@@ -110,7 +112,7 @@ const App: React.FC = () => {
     setCurrentScreen('HOME');
   };
 
-  const handleStartTrip = (route: Route) => {
+  const handleStartTrip = async (route: Route) => {
     if (!device) return;
     const newTrip: Trip = {
       id: crypto.randomUUID(),
@@ -121,18 +123,18 @@ const App: React.FC = () => {
       status: 'ACTIVE'
     };
     setActiveTrip(newTrip);
-    localStorage.setItem('mos_active_trip', JSON.stringify(newTrip));
+    await db.saveActiveTrip(newTrip);
     EventQueue.addEvent('TRIP_START', newTrip);
     setCurrentScreen('TICKETING');
     triggerSync();
   };
 
-  const handleEndTrip = () => {
+  const handleEndTrip = async () => {
     if (activeTrip) {
       EventQueue.addEvent('TRIP_END', { tripId: activeTrip.id, endTime: new Date().toISOString() });
     }
     setActiveTrip(null);
-    localStorage.removeItem('mos_active_trip');
+    await db.saveActiveTrip(null);
     setCurrentScreen('HOME');
     triggerSync();
   };
@@ -141,9 +143,9 @@ const App: React.FC = () => {
     if (isInitializing) {
       return (
         <div className="h-full flex flex-col items-center justify-center text-gray-400 p-8 text-center">
-          <i className="fa-solid fa-satellite-dish fa-bounce text-5xl mb-6 text-[#1A365D]"></i>
-          <h2 className="text-xl font-bold text-gray-700 mb-2">Syncing Terminal...</h2>
-          <p className="text-xs">Connecting to MOS Core Hub</p>
+          <i className="fa-solid fa-microchip fa-bounce text-5xl mb-6 text-[#1A365D]"></i>
+          <h2 className="text-xl font-bold text-gray-700 mb-2 tracking-tighter">Terminal Boot Sequence...</h2>
+          <p className="text-xs font-medium uppercase tracking-widest opacity-60">Handshaking with Core Hub</p>
         </div>
       );
     }
@@ -169,9 +171,9 @@ const App: React.FC = () => {
   const screenTitles: Record<AppState, string> = {
     'SETUP': 'Device Activation',
     'HOME': device?.saccoName || 'Operator Terminal',
-    'START_TRIP': 'New Session',
-    'TICKETING': 'Revenue Deck',
-    'OVERVIEW': 'Trip Data',
+    'START_TRIP': 'Route Selection',
+    'TICKETING': 'Revenue Registry',
+    'OVERVIEW': 'Trip Summary',
     'END_TRIP': 'Close Session'
   };
 

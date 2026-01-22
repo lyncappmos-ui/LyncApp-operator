@@ -34,8 +34,10 @@ const TicketScreen: React.FC<TicketScreenProps> = ({ trip, onOverview }) => {
     try {
       // Use coreClient for real-time reporting if connected
       if (ticket.passengerPhone) {
+        // Fix: Added missing second argument 'dbKey' (set to null) to satisfy fetchCore's 3-argument signature.
         await coreClient.fetchCore(
           (api) => api.ticket(trip.id, ticket.passengerPhone!, amount),
+          null,
           { success: true } // Silently fallback to "queued" mode
         );
       }
