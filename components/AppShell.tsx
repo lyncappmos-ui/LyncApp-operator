@@ -1,6 +1,6 @@
 import React from 'react';
 import { useConnectivity } from '../hooks/useConnectivity';
-import { mosCoreClient } from '../services/mosCoreClient';
+import { coreService } from '../services/coreService';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -11,23 +11,23 @@ interface AppShellProps {
 }
 
 const AppShell: React.FC<AppShellProps> = ({ children, title, onBack, pendingCount, isSyncing }) => {
-  const { isOnline, status, isDisconnected, isDegraded } = useConnectivity();
+  const { status, isDisconnected, isDegraded } = useConnectivity();
 
   const handleRetry = async () => {
-    await mosCoreClient.retryConnection();
+    await coreService.retryConnection();
   };
 
   return (
-    <div className="flex flex-col h-screen w-full max-w-md mx-auto bg-[#F4F7F9] shadow-2xl overflow-hidden border-x border-gray-200 antialiased">
+    <div className="flex flex-col h-screen w-full max-w-md mx-auto bg-[#F4F7F9] shadow-2xl overflow-hidden border-x border-gray-200 antialiased font-sans">
       {/* Resilient System Bar */}
       <div className="bg-[#0D1B2E] text-white px-4 py-1.5 flex justify-between items-center text-[9px] font-black tracking-widest uppercase shrink-0">
         <div className="flex items-center gap-2">
-          <div className={`w-1.5 h-1.5 rounded-full ${isDisconnected ? 'bg-rose-500' : isDegraded ? 'bg-amber-500' : 'bg-teal-500'}`}></div>
+          <div className={`w-1.5 h-1.5 rounded-full ${isDisconnected ? 'bg-rose-500 shadow-[0_0_5px_rgba(244,63,94,0.6)]' : isDegraded ? 'bg-amber-500' : 'bg-teal-500'}`}></div>
           <span>LYNC TERMINAL v3.1</span>
         </div>
         <div className="flex gap-4 items-center">
           <span className={isDisconnected ? 'text-rose-400' : 'text-teal-400 opacity-80'}>
-            {isDisconnected ? 'LOCAL MODE' : isDegraded ? 'DEGRADED SYNC' : 'LIVE SYNC'}
+            {isDisconnected ? 'OFFLINE OPERATOR' : isDegraded ? 'DEGRADED SYNC' : 'HUB CONNECTED'}
           </span>
           {pendingCount > 0 && (
             <span className="text-amber-400 flex items-center gap-1">
@@ -38,13 +38,13 @@ const AppShell: React.FC<AppShellProps> = ({ children, title, onBack, pendingCou
         </div>
       </div>
 
-      {/* Connectivity Alert */}
+      {/* Connectivity Alert Banner */}
       {(isDisconnected || isDegraded) && (
-        <div className={`${isDisconnected ? 'bg-rose-600' : 'bg-amber-500'} text-white px-4 py-2.5 flex items-center justify-between animate-in slide-in-from-top duration-300 shrink-0`}>
+        <div className={`${isDisconnected ? 'bg-rose-600' : 'bg-amber-500'} text-white px-4 py-2.5 flex items-center justify-between animate-in slide-in-from-top duration-300 shrink-0 shadow-lg z-20`}>
           <div className="flex items-center gap-2.5">
             <i className={`fa-solid ${isDisconnected ? 'fa-triangle-exclamation' : 'fa-wave-square'} text-xs`}></i>
             <span className="text-[10px] font-black uppercase tracking-tight">
-              {isDisconnected ? 'MOS Core Hub Offline' : 'Core Connection Unstable'}
+              {isDisconnected ? 'Bridge Offline: Data Cached' : 'Hub Connection Unstable'}
             </span>
           </div>
           <button 
@@ -57,7 +57,7 @@ const AppShell: React.FC<AppShellProps> = ({ children, title, onBack, pendingCou
       )}
 
       {/* Brand Header */}
-      <header className="bg-[#1A365D] text-white px-4 py-4 flex items-center justify-between shadow-lg z-10 shrink-0">
+      <header className="bg-[#1A365D] text-white px-4 py-4 flex items-center justify-between shadow-xl z-10 shrink-0">
         <div className="flex items-center gap-3">
           {onBack ? (
             <button onClick={onBack} className="p-2 -ml-2 active-scale text-white/70 hover:text-white transition-colors">
@@ -97,7 +97,10 @@ const AppShell: React.FC<AppShellProps> = ({ children, title, onBack, pendingCou
         {children}
       </main>
       
-      <div className="h-6 bg-white/5 border-t border-gray-100 shrink-0"></div>
+      {/* Bottom Trim */}
+      <div className="h-6 bg-white border-t border-gray-100 shrink-0 flex items-center justify-center">
+         <div className="w-12 h-1 bg-gray-200 rounded-full"></div>
+      </div>
     </div>
   );
 };

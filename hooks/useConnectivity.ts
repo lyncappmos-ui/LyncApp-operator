@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { ConnectionStatus } from '../types';
-import { mosCoreClient } from '../services/mosCoreClient';
+import { coreService } from '../services/coreService';
 
 export function useConnectivity() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [status, setStatus] = useState<ConnectionStatus>(mosCoreClient.getStatus());
+  const [status, setStatus] = useState<ConnectionStatus>(coreService.getStatus());
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -13,7 +13,7 @@ export function useConnectivity() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    const unsubscribe = mosCoreClient.onStatusChange((newStatus) => {
+    const unsubscribe = coreService.onStatusChange((newStatus) => {
       setStatus(newStatus);
     });
 
@@ -24,5 +24,10 @@ export function useConnectivity() {
     };
   }, []);
 
-  return { isOnline, status, isDegraded: status === 'DEGRADED', isDisconnected: status === 'DISCONNECTED' };
+  return { 
+    isOnline, 
+    status, 
+    isDegraded: status === 'DEGRADED', 
+    isDisconnected: status === 'DISCONNECTED' || !isOnline 
+  };
 }

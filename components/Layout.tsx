@@ -1,7 +1,9 @@
 
+
 import React from 'react';
 import { SyncStatus, ConnectionStatus } from '../types';
-import { coreClient } from '../services/coreClient';
+// Fix: Updated import to use coreService as coreClient is deprecated
+import { coreService } from '../services/coreService';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -25,7 +27,8 @@ const Layout: React.FC<LayoutProps> = ({ children, title, syncStatus, onBack }) 
   const isDegraded = syncStatus.connectionState === 'DEGRADED';
 
   const handleRetry = async () => {
-    await coreClient.retryConnection();
+    // Fix: Updated usage to use coreService
+    await coreService.retryConnection();
   };
 
   return (

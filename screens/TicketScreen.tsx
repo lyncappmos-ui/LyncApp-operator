@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Trip, Ticket } from '../types';
 import { EventQueue } from '../services/eventQueue';
-import { mosCoreClient } from '../services/mosCoreClient';
+import { coreService } from '../services/coreService';
 
 interface TicketScreenProps {
   trip: Trip;
@@ -31,8 +31,9 @@ const TicketScreen: React.FC<TicketScreenProps> = ({ trip, onOverview }) => {
     };
 
     try {
-      if (ticket.passengerPhone) {
-        await mosCoreClient.fetchCore(
+      // Try live registration if phone provided
+      if (ticket.passengerPhone && coreService.getStatus() === 'CONNECTED') {
+        await coreService.fetchCore(
           (api) => api.ticket(trip.id, ticket.passengerPhone!, amount),
           null,
           { success: true }
@@ -40,13 +41,17 @@ const TicketScreen: React.FC<TicketScreenProps> = ({ trip, onOverview }) => {
       }
 
       EventQueue.addEvent('TICKET_ISSUE', ticket);
-      setStatus({ msg: `Ticket Recorded: KES ${amount}`, type: 'success' });
+      setStatus({ 
+        msg: `Ticket Recorded: KES ${amount}`, 
+        type: coreService.getStatus() === 'CONNECTED' ? 'success' : 'info' 
+      });
       setPassengerPhone('');
       
-      setTimeout(() => setStatus(null), 3000);
+      setTimeout(() => setStatus(null), 2500);
     } catch (err) {
       EventQueue.addEvent('TICKET_ISSUE', ticket);
       setStatus({ msg: 'Hub Offline: Recorded Locally', type: 'error' });
+      setTimeout(() => setStatus(null), 3000);
     } finally {
       setIsProcessing(false);
     }
@@ -55,42 +60,39 @@ const TicketScreen: React.FC<TicketScreenProps> = ({ trip, onOverview }) => {
   return (
     <div className="flex flex-col h-full space-y-4">
       {/* Session Identity */}
-      <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
+      <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4 shrink-0">
         <div className="w-12 h-12 bg-[#F4F7F9] rounded-xl flex items-center justify-center text-[#1A365D]">
-           <i className="fa-solid fa-id-card-clip text-xl"></i>
+           <i className="fa-solid fa-bus-simple text-xl"></i>
         </div>
-        <div className="flex-1">
-          <p className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Session Trace</p>
-          <p className="font-black text-[#1A365D] tracking-tight truncate">{trip.id.split('-')[0].toUpperCase()}</p>
+        <div className="flex-1 overflow-hidden">
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Route Trace</p>
+          <p className="font-black text-[#1A365D] tracking-tight truncate uppercase">{trip.routeName}</p>
         </div>
-        <button onClick={onOverview} className="bg-teal-50 text-teal-700 p-2.5 rounded-xl active-scale">
-           <i className="fa-solid fa-ellipsis-vertical"></i>
+        <button onClick={onOverview} className="bg-[#1A365D] text-white p-3 rounded-xl active-scale shadow-lg shadow-blue-900/10">
+           <i className="fa-solid fa-chart-line"></i>
         </button>
       </div>
 
       {/* Revenue Context Banner */}
-      <div className="bg-[#1A365D] text-white p-4 rounded-2xl shadow-lg relative overflow-hidden">
+      <div className="bg-[#1A365D] text-white p-4 rounded-2xl shadow-xl relative overflow-hidden shrink-0">
         <div className="relative z-10 flex justify-between items-center">
            <div>
-              <p className="text-[9px] font-bold text-teal-400 uppercase mb-1 tracking-widest">Active Tariff</p>
+              <p className="text-[9px] font-bold text-teal-400 uppercase mb-1 tracking-widest">Pricing Policy</p>
               <div className="flex items-center gap-2">
-                 <div className="w-5 h-5 bg-teal-500 rounded flex items-center justify-center">
-                   <i className="fa-solid fa-check text-[10px]"></i>
-                 </div>
-                 <span className="text-xl font-black uppercase">Standard</span>
+                 <span className="text-xl font-black uppercase">Standard Fare</span>
               </div>
            </div>
            <div className="text-right">
-              <p className="text-[9px] font-bold text-teal-400 uppercase mb-1 tracking-widest">Hub Sync</p>
-              <div className={`w-3 h-3 rounded-full ml-auto ${mosCoreClient.getStatus() === 'CONNECTED' ? 'bg-teal-500' : 'bg-rose-500 animate-pulse'}`}></div>
+              <p className="text-[9px] font-bold text-teal-400 uppercase mb-1 tracking-widest">Terminal State</p>
+              <div className={`w-3 h-3 rounded-full ml-auto ${coreService.getStatus() === 'CONNECTED' ? 'bg-teal-500 shadow-[0_0_8px_rgba(20,184,166,0.6)]' : 'bg-rose-500 animate-pulse'}`}></div>
            </div>
         </div>
-        <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-teal-500/10 rounded-full"></div>
+        <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-teal-500/10 rounded-full blur-xl"></div>
       </div>
 
       {/* Passenger Input */}
-      <div className="space-y-2">
-        <label className="text-[10px] font-black text-gray-400 uppercase px-1 tracking-widest">Passenger Mobile (for SMS)</label>
+      <div className="space-y-2 shrink-0">
+        <label className="text-[10px] font-black text-gray-400 uppercase px-1 tracking-widest">Passenger Mobile (Optional)</label>
         <div className="relative">
           <input
             type="tel"
@@ -101,46 +103,50 @@ const TicketScreen: React.FC<TicketScreenProps> = ({ trip, onOverview }) => {
             onChange={(e) => setPassengerPhone(e.target.value.replace(/\D/g, ''))}
           />
           <div className="absolute inset-y-0 left-0 pl-4 flex items-center text-gray-300">
-             <i className="fa-solid fa-mobile-screen-button"></i>
+             <i className="fa-solid fa-mobile-retro"></i>
           </div>
         </div>
       </div>
 
-      {/* Status Alert */}
-      {status && (
-        <div className={`p-2 rounded-lg text-center font-black text-[10px] uppercase animate-in fade-in slide-in-from-top-2 duration-300 ${
-          status.type === 'success' ? 'bg-emerald-100 text-emerald-700' : 
-          status.type === 'error' ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'
-        }`}>
-          {status.msg}
-        </div>
-      )}
+      {/* Status Alert Overlay-style */}
+      <div className="h-6 shrink-0 relative">
+        {status && (
+          <div className={`absolute inset-0 flex items-center justify-center rounded-lg font-black text-[9px] uppercase tracking-widest animate-in fade-in slide-in-from-bottom-2 duration-300 ${
+            status.type === 'success' ? 'text-teal-600' : 
+            status.type === 'error' ? 'text-rose-600' : 'text-blue-600'
+          }`}>
+            <span className="bg-white/80 backdrop-blur px-3 py-1 rounded-full border border-current/20 shadow-sm">
+              {status.msg}
+            </span>
+          </div>
+        )}
+      </div>
 
       {/* Fare Grid */}
-      <div className="flex-1 grid grid-cols-2 gap-3 overflow-y-auto pr-1 py-1 no-scrollbar">
+      <div className="flex-1 grid grid-cols-2 gap-3 overflow-y-auto pr-1 py-1 no-scrollbar min-h-0">
         {farePresets.map(fare => (
           <button
             key={fare}
             disabled={isProcessing}
             onClick={() => issueTicket(fare)}
-            className="bg-white border-2 border-gray-100 hover:border-teal-500 rounded-2xl p-5 shadow-sm active-scale transition-all flex flex-col items-center group active:bg-teal-500"
+            className="bg-white border-2 border-gray-100 hover:border-teal-500 rounded-2xl p-5 shadow-sm active-scale transition-all flex flex-col items-center group active:bg-[#1A365D]"
           >
-            <span className="text-gray-400 text-[9px] font-black uppercase mb-1 group-active:text-white/70">KES</span>
+            <span className="text-gray-400 text-[9px] font-black uppercase mb-1 group-active:text-teal-400">KES</span>
             <span className="text-3xl font-black text-[#1A365D] group-active:text-white leading-none">{fare}</span>
           </button>
         ))}
       </div>
 
-      {/* Manual Confirm */}
+      {/* Manual Action Bar */}
       <div className="flex gap-2 pb-2 shrink-0">
          <button className="flex-1 bg-white border-2 border-gray-100 text-gray-400 font-black py-4 rounded-2xl active-scale text-[10px] uppercase tracking-widest">
            Other
          </button>
          <button 
            onClick={() => issueTicket(50)}
-           className="flex-[2] bg-[#00ACC1] text-white font-black py-4 rounded-2xl active-scale text-lg shadow-lg shadow-teal-500/20 uppercase tracking-tight"
+           className="flex-[2] bg-teal-500 text-white font-black py-4 rounded-2xl active-scale text-lg shadow-lg shadow-teal-500/20 uppercase tracking-tight"
          >
-           Record Ticket
+           Issue Cash Ticket
          </button>
       </div>
     </div>
