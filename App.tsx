@@ -1,10 +1,12 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { AppState, DeviceConfig, Trip, SyncStatus, Route } from './types';
 import { EventQueue } from './services/eventQueue';
 import { coreClient } from './services/coreClient';
 import { db } from './services/databaseClient';
-import Layout from './components/Layout';
+
+// Components
+import AppShell from './components/AppShell';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Screens
 import SetupScreen from './screens/SetupScreen';
@@ -23,19 +25,16 @@ const App: React.FC = () => {
   const [activeTrip, setActiveTrip] = useState<Trip | null>(null);
   const [currentScreen, setCurrentScreen] = useState<AppState>(device ? 'HOME' : 'SETUP');
   const [isInitializing, setIsInitializing] = useState(true);
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>({
-    isOnline: navigator.onLine,
+  const [initError, setInitError] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState({
     pendingCount: 0,
-    isSyncing: false,
-    connectionState: coreClient.getStatus()
+    isSyncing: false
   });
 
-  // Listen for Core Status changes
+  // Verify Environment
   useEffect(() => {
-    const unsubscribe = coreClient.onStatusChange((status) => {
-      setSyncStatus(prev => ({ ...prev, connectionState: status }));
-    });
-    return unsubscribe;
+    // If we use environment variables, validate them here. 
+    // For this context, we assume the environment is handled by the Bridge.
   }, []);
 
   // Hybrid Handshake and Context Recovery
@@ -43,7 +42,6 @@ const App: React.FC = () => {
     const performHandshake = async () => {
       try {
         if (device) {
-          // Recovery Flow: Try Core Context -> Then DB Context -> Then LocalStorage
           const context = await coreClient.fetchCore(
             (api) => api.getTerminalContext(device.operatorPhone),
             'terminal_context',
@@ -51,18 +49,15 @@ const App: React.FC = () => {
           );
           
           let tripToSet = context?.activeTrip;
-          
-          if (!tripToSet) {
-             tripToSet = await db.getActiveTrip();
-          }
+          if (!tripToSet) tripToSet = await db.getActiveTrip();
 
           if (tripToSet) {
             setActiveTrip(tripToSet);
             setCurrentScreen('TICKETING');
           }
         }
-      } catch (err) {
-        console.warn('[App] Critical Initialization Error', err);
+      } catch (err: any) {
+        console.warn('[App] Recovery failed, proceeding in safety mode.', err);
       } finally {
         setIsInitializing(false);
       }
@@ -72,7 +67,8 @@ const App: React.FC = () => {
   }, [device]);
 
   const triggerSync = useCallback(async () => {
-    if (!navigator.onLine || coreClient.getStatus() === 'DISCONNECTED') return;
+    if (coreClient.getStatus() === 'DISCONNECTED') return;
+    
     setSyncStatus(prev => ({ ...prev, isSyncing: true }));
     try {
       await EventQueue.sync();
@@ -86,24 +82,15 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const handleOnline = () => setSyncStatus(prev => ({ ...prev, isOnline: true }));
-    const handleOffline = () => setSyncStatus(prev => ({ ...prev, isOnline: false }));
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
     const interval = setInterval(() => {
       setSyncStatus(prev => ({
         ...prev,
         pendingCount: EventQueue.getPending().length
       }));
       triggerSync();
-    }, 5000);
+    }, 10000); // 10s sync window
 
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-      clearInterval(interval);
-    };
+    return () => clearInterval(interval);
   }, [triggerSync]);
 
   const handleSetupComplete = (config: DeviceConfig) => {
@@ -142,12 +129,23 @@ const App: React.FC = () => {
   const renderScreen = () => {
     if (isInitializing) {
       return (
-        <div className="h-full flex flex-col items-center justify-center text-gray-400 p-8 text-center">
-          <i className="fa-solid fa-microchip fa-bounce text-5xl mb-6 text-[#1A365D]"></i>
-          <h2 className="text-xl font-bold text-gray-700 mb-2 tracking-tighter">Terminal Boot Sequence...</h2>
-          <p className="text-xs font-medium uppercase tracking-widest opacity-60">Handshaking with Core Hub</p>
+        <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-pulse">
+          <i className="fa-solid fa-microchip text-5xl mb-6 text-[#1A365D]"></i>
+          <h2 className="text-xl font-black text-gray-800 mb-2 tracking-tight">Booting Terminal...</h2>
+          <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-teal-600">Secure MOS Link</p>
         </div>
       );
+    }
+
+    if (initError) {
+       return (
+         <div className="h-full flex flex-col items-center justify-center p-8 text-center bg-rose-50 rounded-3xl border-2 border-rose-100">
+           <i className="fa-solid fa-circle-xmark text-5xl mb-4 text-rose-500"></i>
+           <h2 className="text-xl font-black text-rose-700 mb-2">Init Error</h2>
+           <p className="text-xs text-rose-600 mb-6">{initError}</p>
+           <button onClick={() => window.location.reload()} className="bg-rose-600 text-white px-8 py-3 rounded-xl font-bold uppercase text-xs">Reload</button>
+         </div>
+       );
     }
 
     switch (currentScreen) {
@@ -164,27 +162,30 @@ const App: React.FC = () => {
       case 'TICKETING': return <TicketScreen trip={activeTrip!} onOverview={() => setCurrentScreen('OVERVIEW')} />;
       case 'OVERVIEW': return <TripOverviewScreen trip={activeTrip!} onEndTrip={() => setCurrentScreen('END_TRIP')} onBack={() => setCurrentScreen('TICKETING')} />;
       case 'END_TRIP': return <EndTripScreen trip={activeTrip!} onConfirm={handleEndTrip} onCancel={() => setCurrentScreen('OVERVIEW')} />;
-      default: return <div>Unknown Screen</div>;
+      default: return <div>Unknown Interface State</div>;
     }
   };
 
   const screenTitles: Record<AppState, string> = {
-    'SETUP': 'Device Activation',
-    'HOME': device?.saccoName || 'Operator Terminal',
-    'START_TRIP': 'Route Selection',
+    'SETUP': 'Activation',
+    'HOME': device?.saccoName || 'Operator Deck',
+    'START_TRIP': 'Fleets',
     'TICKETING': 'Revenue Registry',
-    'OVERVIEW': 'Trip Summary',
+    'OVERVIEW': 'Trip Metrics',
     'END_TRIP': 'Close Session'
   };
 
   return (
-    <Layout
-      title={screenTitles[currentScreen]}
-      syncStatus={syncStatus}
-      onBack={currentScreen !== 'HOME' && currentScreen !== 'SETUP' && currentScreen !== 'TICKETING' ? () => setCurrentScreen('HOME') : undefined}
-    >
-      {renderScreen()}
-    </Layout>
+    <ErrorBoundary>
+      <AppShell
+        title={screenTitles[currentScreen]}
+        pendingCount={syncStatus.pendingCount}
+        isSyncing={syncStatus.isSyncing}
+        onBack={currentScreen !== 'HOME' && currentScreen !== 'SETUP' && currentScreen !== 'TICKETING' ? () => setCurrentScreen('HOME') : undefined}
+      >
+        {renderScreen()}
+      </AppShell>
+    </ErrorBoundary>
   );
 };
 
