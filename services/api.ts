@@ -3,11 +3,18 @@ import { wrapAsCoreResponse } from './coreAdapter';
 
 /**
  * MOSCoreBridge: Secure RPC link to Hub.
- * Uses postMessage for iframe-based cross-origin bridge by default,
- * but allows overriding via environment variables for native deployments.
+ * Using standard endpoint with /api suffix for RPC commands.
  */
-// Fix: Cast import.meta to any to access env property in Vite environments where types are restricted
-const BASE_URL = (import.meta as any).env.VITE_MOS_API_BASE_URL || 'https://core.lync.app';
+const getBaseUrl = () => {
+  try {
+    // Standard Vercel Environment variable access with safety fallback
+    return (import.meta as any).env?.VITE_MOS_API_BASE_URL || 'https://lyncapp-mos-core.vercel.app/api';
+  } catch {
+    return 'https://lyncapp-mos-core.vercel.app/api';
+  }
+};
+
+const BASE_URL = getBaseUrl();
 const TIMEOUT = 12000;
 
 class MOSCoreBridge {
@@ -28,7 +35,8 @@ class MOSCoreBridge {
   }
 
   private handleMessage(event: MessageEvent) {
-    if (!event.origin.includes('lync.app') && event.origin !== BASE_URL) return;
+    // Security: Only accept messages from trusted core origins or our configured base
+    if (!event.origin.includes('lync.app') && !BASE_URL.includes(event.origin)) return;
     
     const { requestId, payload, error } = event.data;
     const request = this.pendingRequests.get(requestId);
@@ -45,7 +53,7 @@ class MOSCoreBridge {
     const iframe = this.getIframe();
     const requestId = crypto.randomUUID();
 
-    // Fallback to simulation if environment is not set up correctly
+    // Fallback to simulation if the bridge iframe isn't ready or mounted
     if (!iframe || !iframe.contentWindow) {
       const simulatedData = await this.simulate(command, payload);
       return wrapAsCoreResponse(simulatedData as T);
@@ -80,7 +88,7 @@ class MOSCoreBridge {
   private async simulate(command: string, payload: any) {
     await new Promise(r => setTimeout(r, 600));
     switch (command) {
-      case 'getCrew': return { name: 'Verified User', phone: payload[0] };
+      case 'getCrew': return { name: 'Verified Operator', phone: payload[0] };
       case 'registerDevice': return { saccoName: `${payload.saccoCode || 'LYNC'} TRANSIT` };
       case 'getRoutes': return [
         { id: 'r1', name: 'CBD - Westlands (Local)', standardFare: 50 },

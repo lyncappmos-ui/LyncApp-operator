@@ -1,9 +1,9 @@
-/** @type {import('tailwindcss').Config} */
+/** 
+ * Tailwind config neutralized. 
+ * Project uses Tailwind CDN in index.html to avoid build-time dependency issues on Vercel.
+ */
 export default {
-  content: [
-    "./index.html",
-    "./**/*.{js,ts,jsx,tsx}",
-  ],
+  content: [],
   theme: {
     extend: {},
   },

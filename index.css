@@ -1,4 +1,21 @@
+/* 
+   Build-time tailwind directives removed to prevent Vercel "Cannot find module 'tailwindcss'" errors.
+   Styles are now handled via the CDN in index.html.
+*/
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+.active-scale {
+  transition: transform 0.1s ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+}
