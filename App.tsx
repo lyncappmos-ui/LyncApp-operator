@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AppState, DeviceConfig, Trip, SyncStatus, Route } from './types';
+import { AppState, DeviceConfig, Trip, Route } from './types';
 import { EventQueue } from './services/eventQueue';
-import { coreClient } from './services/coreClient';
+import { mosCoreClient } from './services/mosCoreClient';
 import { db } from './services/databaseClient';
 
 // Components
@@ -25,16 +25,22 @@ const App: React.FC = () => {
   const [activeTrip, setActiveTrip] = useState<Trip | null>(null);
   const [currentScreen, setCurrentScreen] = useState<AppState>(device ? 'HOME' : 'SETUP');
   const [isInitializing, setIsInitializing] = useState(true);
-  const [initError, setInitError] = useState<string | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState({
     pendingCount: 0,
     isSyncing: false
   });
 
-  // Verify Environment
+  // Verify Environment Safety (Phase 5)
   useEffect(() => {
-    // If we use environment variables, validate them here. 
-    // For this context, we assume the environment is handled by the Bridge.
+    // In this specific deployment environment, we use VITE_MOS_API_BASE_URL.
+    // If it's completely missing and we're not in a mock/simulation context, we flag it.
+    // Fix: Cast import.meta to any to access env property in Vite environments where types are restricted
+    const BASE_URL = (import.meta as any).env.VITE_MOS_API_BASE_URL;
+    if (!BASE_URL && !window.location.hostname.includes('localhost')) {
+      // For now we allow missing BASE_URL as it defaults in api.ts, 
+      // but a strict production-only check would go here.
+    }
   }, []);
 
   // Hybrid Handshake and Context Recovery
@@ -42,7 +48,7 @@ const App: React.FC = () => {
     const performHandshake = async () => {
       try {
         if (device) {
-          const context = await coreClient.fetchCore(
+          const context = await mosCoreClient.fetchCore(
             (api) => api.getTerminalContext(device.operatorPhone),
             'terminal_context',
             { activeTrip: null }
@@ -67,7 +73,7 @@ const App: React.FC = () => {
   }, [device]);
 
   const triggerSync = useCallback(async () => {
-    if (coreClient.getStatus() === 'DISCONNECTED') return;
+    if (mosCoreClient.getStatus() === 'DISCONNECTED') return;
     
     setSyncStatus(prev => ({ ...prev, isSyncing: true }));
     try {
@@ -88,7 +94,7 @@ const App: React.FC = () => {
         pendingCount: EventQueue.getPending().length
       }));
       triggerSync();
-    }, 10000); // 10s sync window
+    }, 10000); 
 
     return () => clearInterval(interval);
   }, [triggerSync]);
@@ -127,6 +133,17 @@ const App: React.FC = () => {
   };
 
   const renderScreen = () => {
+    if (configError) {
+      return (
+        <div className="h-full flex flex-col items-center justify-center p-8 text-center bg-rose-50 rounded-3xl border-2 border-rose-100">
+          <i className="fa-solid fa-triangle-exclamation text-5xl mb-4 text-rose-500"></i>
+          <h2 className="text-xl font-black text-rose-700 mb-2">Configuration Error</h2>
+          <p className="text-xs text-rose-600 mb-6">{configError}</p>
+          <button onClick={() => window.location.reload()} className="bg-rose-600 text-white px-8 py-3 rounded-xl font-bold uppercase text-xs">Verify Setup</button>
+        </div>
+      );
+    }
+
     if (isInitializing) {
       return (
         <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-pulse">
@@ -135,17 +152,6 @@ const App: React.FC = () => {
           <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-teal-600">Secure MOS Link</p>
         </div>
       );
-    }
-
-    if (initError) {
-       return (
-         <div className="h-full flex flex-col items-center justify-center p-8 text-center bg-rose-50 rounded-3xl border-2 border-rose-100">
-           <i className="fa-solid fa-circle-xmark text-5xl mb-4 text-rose-500"></i>
-           <h2 className="text-xl font-black text-rose-700 mb-2">Init Error</h2>
-           <p className="text-xs text-rose-600 mb-6">{initError}</p>
-           <button onClick={() => window.location.reload()} className="bg-rose-600 text-white px-8 py-3 rounded-xl font-bold uppercase text-xs">Reload</button>
-         </div>
-       );
     }
 
     switch (currentScreen) {

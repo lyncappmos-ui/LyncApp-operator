@@ -58,8 +58,8 @@ class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    // Fix: Access children through this.props in a class component
-    return this.props.children;
+    // Fix: Access children through this.props in a class component, cast to any to resolve property visibility issues
+    return (this as any).props.children;
   }
 }
 

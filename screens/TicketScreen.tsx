@@ -1,8 +1,7 @@
-
 import React, { useState } from 'react';
 import { Trip, Ticket } from '../types';
 import { EventQueue } from '../services/eventQueue';
-import { coreClient } from '../services/coreClient';
+import { mosCoreClient } from '../services/mosCoreClient';
 
 interface TicketScreenProps {
   trip: Trip;
@@ -32,26 +31,22 @@ const TicketScreen: React.FC<TicketScreenProps> = ({ trip, onOverview }) => {
     };
 
     try {
-      // Use coreClient for real-time reporting if connected
       if (ticket.passengerPhone) {
-        // Fix: Added missing second argument 'dbKey' (set to null) to satisfy fetchCore's 3-argument signature.
-        await coreClient.fetchCore(
+        await mosCoreClient.fetchCore(
           (api) => api.ticket(trip.id, ticket.passengerPhone!, amount),
           null,
-          { success: true } // Silently fallback to "queued" mode
+          { success: true }
         );
       }
 
-      // Always log to local queue for integrity
       EventQueue.addEvent('TICKET_ISSUE', ticket);
       setStatus({ msg: `Ticket Recorded: KES ${amount}`, type: 'success' });
       setPassengerPhone('');
       
       setTimeout(() => setStatus(null), 3000);
     } catch (err) {
-      // Catch-all safety: Ensure the user knows it's recorded locally
       EventQueue.addEvent('TICKET_ISSUE', ticket);
-      setStatus({ msg: 'Core Unreachable: Recorded Locally', type: 'error' });
+      setStatus({ msg: 'Hub Offline: Recorded Locally', type: 'error' });
     } finally {
       setIsProcessing(false);
     }
@@ -82,12 +77,12 @@ const TicketScreen: React.FC<TicketScreenProps> = ({ trip, onOverview }) => {
                  <div className="w-5 h-5 bg-teal-500 rounded flex items-center justify-center">
                    <i className="fa-solid fa-check text-[10px]"></i>
                  </div>
-                 <span className="text-xl font-black">STANDARD</span>
+                 <span className="text-xl font-black uppercase">Standard</span>
               </div>
            </div>
            <div className="text-right">
               <p className="text-[9px] font-bold text-teal-400 uppercase mb-1 tracking-widest">Hub Sync</p>
-              <div className={`w-3 h-3 rounded-full ml-auto ${coreClient.getStatus() === 'CONNECTED' ? 'bg-teal-500' : 'bg-rose-500 animate-pulse'}`}></div>
+              <div className={`w-3 h-3 rounded-full ml-auto ${mosCoreClient.getStatus() === 'CONNECTED' ? 'bg-teal-500' : 'bg-rose-500 animate-pulse'}`}></div>
            </div>
         </div>
         <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-teal-500/10 rounded-full"></div>
@@ -137,15 +132,15 @@ const TicketScreen: React.FC<TicketScreenProps> = ({ trip, onOverview }) => {
       </div>
 
       {/* Manual Confirm */}
-      <div className="flex gap-2 pb-2">
+      <div className="flex gap-2 pb-2 shrink-0">
          <button className="flex-1 bg-white border-2 border-gray-100 text-gray-400 font-black py-4 rounded-2xl active-scale text-[10px] uppercase tracking-widest">
-           Other Amount
+           Other
          </button>
          <button 
            onClick={() => issueTicket(50)}
            className="flex-[2] bg-[#00ACC1] text-white font-black py-4 rounded-2xl active-scale text-lg shadow-lg shadow-teal-500/20 uppercase tracking-tight"
          >
-           Confirm Record
+           Record Ticket
          </button>
       </div>
     </div>

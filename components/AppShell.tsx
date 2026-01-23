@@ -1,6 +1,6 @@
 import React from 'react';
 import { useConnectivity } from '../hooks/useConnectivity';
-import { coreClient } from '../services/coreClient';
+import { mosCoreClient } from '../services/mosCoreClient';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -14,7 +14,7 @@ const AppShell: React.FC<AppShellProps> = ({ children, title, onBack, pendingCou
   const { isOnline, status, isDisconnected, isDegraded } = useConnectivity();
 
   const handleRetry = async () => {
-    await coreClient.retryConnection();
+    await mosCoreClient.retryConnection();
   };
 
   return (
@@ -27,7 +27,7 @@ const AppShell: React.FC<AppShellProps> = ({ children, title, onBack, pendingCou
         </div>
         <div className="flex gap-4 items-center">
           <span className={isDisconnected ? 'text-rose-400' : 'text-teal-400 opacity-80'}>
-            {isDisconnected ? 'LOCAL MODE' : isDegraded ? 'LIMITED SYNC' : 'LIVE SYNC'}
+            {isDisconnected ? 'LOCAL MODE' : isDegraded ? 'DEGRADED SYNC' : 'LIVE SYNC'}
           </span>
           {pendingCount > 0 && (
             <span className="text-amber-400 flex items-center gap-1">
@@ -44,7 +44,7 @@ const AppShell: React.FC<AppShellProps> = ({ children, title, onBack, pendingCou
           <div className="flex items-center gap-2.5">
             <i className={`fa-solid ${isDisconnected ? 'fa-triangle-exclamation' : 'fa-wave-square'} text-xs`}></i>
             <span className="text-[10px] font-black uppercase tracking-tight">
-              {isDisconnected ? 'Core Hub Offline' : 'Core Connection Weak'}
+              {isDisconnected ? 'MOS Core Hub Offline' : 'Core Connection Unstable'}
             </span>
           </div>
           <button 
@@ -70,7 +70,7 @@ const AppShell: React.FC<AppShellProps> = ({ children, title, onBack, pendingCou
           )}
           <div className="flex flex-col">
              <span className="text-lg font-black tracking-tight leading-none">LyncApp</span>
-             <span className="text-[8px] font-bold text-teal-400 tracking-[0.3em] uppercase opacity-80">Operator System</span>
+             <span className="text-[8px] font-bold text-teal-400 tracking-[0.3em] uppercase opacity-80">Operator Terminal</span>
           </div>
         </div>
         
@@ -97,7 +97,6 @@ const AppShell: React.FC<AppShellProps> = ({ children, title, onBack, pendingCou
         {children}
       </main>
       
-      {/* Safe Area Padding for PWA/Mobile */}
       <div className="h-6 bg-white/5 border-t border-gray-100 shrink-0"></div>
     </div>
   );

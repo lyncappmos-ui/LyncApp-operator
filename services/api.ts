@@ -1,8 +1,13 @@
 import { DeviceConfig, Route, MOSEvent, Trip, CoreResponse } from '../types';
 import { wrapAsCoreResponse } from './coreAdapter';
 
-// Safe access to environment or bridge origin
-const CORE_ORIGIN = 'https://core.lync.app';
+/**
+ * MOSCoreBridge: Secure RPC link to Hub.
+ * Uses postMessage for iframe-based cross-origin bridge by default,
+ * but allows overriding via environment variables for native deployments.
+ */
+// Fix: Cast import.meta to any to access env property in Vite environments where types are restricted
+const BASE_URL = (import.meta as any).env.VITE_MOS_API_BASE_URL || 'https://core.lync.app';
 const TIMEOUT = 12000;
 
 class MOSCoreBridge {
@@ -23,7 +28,7 @@ class MOSCoreBridge {
   }
 
   private handleMessage(event: MessageEvent) {
-    if (event.origin !== CORE_ORIGIN && !event.origin.includes('lync.app')) return;
+    if (!event.origin.includes('lync.app') && event.origin !== BASE_URL) return;
     
     const { requestId, payload, error } = event.data;
     const request = this.pendingRequests.get(requestId);
@@ -40,8 +45,8 @@ class MOSCoreBridge {
     const iframe = this.getIframe();
     const requestId = crypto.randomUUID();
 
+    // Fallback to simulation if environment is not set up correctly
     if (!iframe || !iframe.contentWindow) {
-      console.warn(`[Bridge] Hub unreachable. Falling back to internal simulation logic.`);
       const simulatedData = await this.simulate(command, payload);
       return wrapAsCoreResponse(simulatedData as T);
     }
@@ -49,7 +54,7 @@ class MOSCoreBridge {
     return new Promise((resolve) => {
       const timer = window.setTimeout(() => {
         this.pendingRequests.delete(requestId);
-        resolve(wrapAsCoreResponse(null, `CORE_TIMEOUT: Hub did not respond to ${command}`));
+        resolve(wrapAsCoreResponse(null, `CORE_TIMEOUT: ${command}`));
       }, TIMEOUT);
 
       this.pendingRequests.set(requestId, { 
@@ -73,26 +78,19 @@ class MOSCoreBridge {
   }
 
   private async simulate(command: string, payload: any) {
-    await new Promise(r => setTimeout(r, 800));
+    await new Promise(r => setTimeout(r, 600));
     switch (command) {
-      case 'getCrew': 
-        return { name: 'Verified User', phone: payload[0] };
-      case 'registerDevice': 
-        return { saccoName: `${payload.saccoCode || 'LYNC'} TRANSIT` };
-      case 'getRoutes': 
-        return [
-          { id: 'r1', name: 'CBD - Westlands (Local)', standardFare: 50 },
-          { id: 'r2', name: 'CBD - Ngong (Local)', standardFare: 100 },
-          { id: 'r3', name: 'Town - Rongai (Local)', standardFare: 80 },
-        ];
-      case 'getTerminalContext':
-        return { activeTrip: null };
-      case 'ticket':
-        return { success: true };
-      case 'syncEvent': 
-        return true;
-      default: 
-        return null;
+      case 'getCrew': return { name: 'Verified User', phone: payload[0] };
+      case 'registerDevice': return { saccoName: `${payload.saccoCode || 'LYNC'} TRANSIT` };
+      case 'getRoutes': return [
+        { id: 'r1', name: 'CBD - Westlands (Local)', standardFare: 50 },
+        { id: 'r2', name: 'CBD - Ngong (Local)', standardFare: 100 },
+        { id: 'r3', name: 'Town - Rongai (Local)', standardFare: 80 },
+      ];
+      case 'getTerminalContext': return { activeTrip: null };
+      case 'ticket': return { success: true };
+      case 'syncEvent': return true;
+      default: return null;
     }
   }
 

@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { ConnectionStatus } from '../types';
-import { coreClient } from '../services/coreClient';
+import { mosCoreClient } from '../services/mosCoreClient';
 
 export function useConnectivity() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [status, setStatus] = useState<ConnectionStatus>(coreClient.getStatus());
+  const [status, setStatus] = useState<ConnectionStatus>(mosCoreClient.getStatus());
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -13,7 +13,7 @@ export function useConnectivity() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    const unsubscribe = coreClient.onStatusChange((newStatus) => {
+    const unsubscribe = mosCoreClient.onStatusChange((newStatus) => {
       setStatus(newStatus);
     });
 

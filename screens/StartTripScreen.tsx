@@ -1,7 +1,6 @@
-
 import React, { useEffect, useState } from 'react';
 import { Route } from '../types';
-import { coreClient } from '../services/coreClient';
+import { mosCoreClient } from '../services/mosCoreClient';
 
 interface StartTripScreenProps {
   onStart: (route: Route) => void;
@@ -15,9 +14,9 @@ const StartTripScreen: React.FC<StartTripScreenProps> = ({ onStart, onBack }) =>
   useEffect(() => {
     const fetchRoutes = async () => {
       try {
-        const data = await coreClient.fetchCore(
+        const data = await mosCoreClient.fetchCore(
           (api) => api.getRoutes(),
-          'routes', // Cache key for Database Fallback
+          'routes',
           [
             { id: 'off-1', name: 'Westlands Express (Local)', standardFare: 50 },
             { id: 'off-2', name: 'Rongai Direct (Local)', standardFare: 100 }
@@ -49,7 +48,7 @@ const StartTripScreen: React.FC<StartTripScreenProps> = ({ onStart, onBack }) =>
       <div className="flex justify-between items-center px-1">
          <h2 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Available Fleets</h2>
          <span className="text-[8px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-bold uppercase">
-           {coreClient.getStatus() === 'CONNECTED' ? 'Live' : 'Cached'}
+           {mosCoreClient.getStatus() === 'CONNECTED' ? 'Live' : 'Cached'}
          </span>
       </div>
       
