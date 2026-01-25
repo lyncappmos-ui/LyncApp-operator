@@ -50,7 +50,8 @@ const StartTripScreen: React.FC<StartTripScreenProps> = ({ onStart, onBack }) =>
             className="w-full bg-white p-6 rounded-[2rem] shadow-sm border-2 border-gray-100 flex items-center justify-between active-scale hover:border-teal-500 transition-all text-left"
           >
             <div>
-              <p className="text-lg font-black text-[#1A365D] leading-tight">{route.name}</p>
+              {/* Fix: Route interface does not have a 'name' property, use origin and destination instead */}
+              <p className="text-lg font-black text-[#1A365D] leading-tight">{route.origin} → {route.destination}</p>
               <p className="text-gray-400 text-[10px] font-bold uppercase mt-1 tracking-wider">
                 Standard Tariff: <span className="text-teal-600 font-black">KES {route.standardFare}</span>
               </p>

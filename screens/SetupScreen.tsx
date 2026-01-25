@@ -45,6 +45,18 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onComplete }) => {
     }
   };
 
+  const handleDevBypass = () => {
+    const devConfig: DeviceConfig = {
+      saccoCode: 'DEV',
+      branch: 'DEVELOPER_LAB',
+      vehicleReg: 'KDA 001X',
+      operatorPin: '0000',
+      operatorPhone: '254700000000',
+      saccoName: 'LYNC DEVELOPER HQ'
+    };
+    onComplete(devConfig);
+  };
+
   return (
     <div className="flex flex-col min-h-full">
       {/* Hero Logo Section */}
@@ -128,8 +140,18 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onComplete }) => {
         </button>
       </form>
       
+      <div className="mt-6 px-6">
+        <button
+          onClick={handleDevBypass}
+          className="w-full bg-amber-50 border-2 border-amber-200 border-dashed text-amber-700 font-black py-3 rounded-2xl active-scale text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-2"
+        >
+          <i className="fa-solid fa-code"></i>
+          Developer Bypass Access
+        </button>
+      </div>
+
       <div className="mt-auto py-8 text-center">
-         <p className="text-[8px] font-bold text-gray-300 uppercase tracking-[0.5em]">Terminal Verified Hardware v3.0</p>
+         <p className="text-[8px] font-bold text-gray-300 uppercase tracking-[0.5em]">Terminal Verified Hardware v3.1</p>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AppState, DeviceConfig, Trip, Route } from './types';
+import { AppState, DeviceConfig, Trip, Route, Ticket, CrewMember, Vehicle } from './types';
 import { EventQueue } from './services/eventQueue';
 import { coreService } from './services/coreService';
 import { db } from './services/databaseClient';
@@ -15,6 +15,7 @@ import StartTripScreen from './screens/StartTripScreen';
 import TicketScreen from './screens/TicketScreen';
 import TripOverviewScreen from './screens/TripOverviewScreen';
 import EndTripScreen from './screens/EndTripScreen';
+import SeatMapScreen from './screens/SeatMapScreen';
 
 const App: React.FC = () => {
   const [device, setDevice] = useState<DeviceConfig | null>(() => {
@@ -22,42 +23,44 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : null;
   });
 
+  const [operator, setOperator] = useState<CrewMember | null>(null);
   const [activeTrip, setActiveTrip] = useState<Trip | null>(null);
   const [currentScreen, setCurrentScreen] = useState<AppState>(device ? 'HOME' : 'SETUP');
   const [isInitializing, setIsInitializing] = useState(true);
+  const [pendingTicket, setPendingTicket] = useState<{ amount: number; phone?: string } | null>(null);
   const [syncStatus, setSyncStatus] = useState({
     pendingCount: 0,
     isSyncing: false
   });
 
-  // Hybrid Handshake and Context Recovery
+  // Handshake with MOS Core State API
   useEffect(() => {
-    const performHandshake = async () => {
+    const syncState = async () => {
       try {
         if (device) {
-          const context = await coreService.fetchTerminalContext(device.operatorPhone);
+          const state = await coreService.getOperatorState(device.operatorPhone);
+          setOperator(state.operator);
           
-          let tripToSet = context?.activeTrip;
+          let tripToSet = state.activeTrip;
           if (!tripToSet) tripToSet = await db.getActiveTrip();
 
           if (tripToSet) {
             setActiveTrip(tripToSet);
-            setCurrentScreen('TICKETING');
+            if (currentScreen === 'HOME') setCurrentScreen('TICKETING');
           }
         }
-      } catch (err: any) {
-        console.warn('[App] Handshake failed, operating in safe mode.', err);
+      } catch (err) {
+        console.warn('[App] RPC state sync failed', err);
       } finally {
         setIsInitializing(false);
       }
     };
 
-    performHandshake();
+    syncState();
   }, [device]);
 
   const triggerSync = useCallback(async () => {
     if (coreService.getStatus() === 'DISCONNECTED') return;
-    
     setSyncStatus(prev => ({ ...prev, isSyncing: true }));
     try {
       await EventQueue.sync();
@@ -78,7 +81,6 @@ const App: React.FC = () => {
       }));
       triggerSync();
     }, 15000); 
-
     return () => clearInterval(interval);
   }, [triggerSync]);
 
@@ -93,10 +95,10 @@ const App: React.FC = () => {
     const newTrip: Trip = {
       id: crypto.randomUUID(),
       routeId: route.id,
-      routeName: route.name,
+      vehicleId: device.vehicleReg,
       startTime: new Date().toISOString(),
-      vehicleReg: device.vehicleReg,
-      status: 'ACTIVE'
+      status: 'active',
+      routeName: `${route.origin} → ${route.destination}`
     };
     setActiveTrip(newTrip);
     await db.saveActiveTrip(newTrip);
@@ -115,6 +117,32 @@ const App: React.FC = () => {
     triggerSync();
   };
 
+  const initiateTicketBooking = (amount: number, phone?: string) => {
+    setPendingTicket({ amount, phone });
+    setCurrentScreen('SEAT_MAP');
+  };
+
+  const handleFinalizeTicket = async (seatNumber: string) => {
+    if (!activeTrip || !pendingTicket) return;
+
+    const ticket: Ticket = {
+      id: crypto.randomUUID(),
+      tripId: activeTrip.id,
+      seatNumber,
+      passengerName: pendingTicket.phone || 'Anonymous',
+      amountPaid: pendingTicket.amount,
+      timestamp: new Date().toISOString(),
+      synced: false
+    };
+
+    EventQueue.addEvent('TICKET_ISSUE', ticket);
+    coreService.emit('seatBooked', { tripId: activeTrip.id, seatNumber });
+
+    setPendingTicket(null);
+    setCurrentScreen('TICKETING');
+    triggerSync();
+  };
+
   const renderScreen = () => {
     if (isInitializing) {
       return (
@@ -122,8 +150,8 @@ const App: React.FC = () => {
           <div className="w-16 h-16 bg-[#1A365D] rounded-3xl flex items-center justify-center mb-6 animate-bounce shadow-2xl">
              <i className="fa-solid fa-microchip text-teal-400 text-2xl"></i>
           </div>
-          <h2 className="text-xl font-black text-gray-800 mb-2 tracking-tight">Booting Terminal</h2>
-          <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-teal-600 animate-pulse">Establishing Secure Link</p>
+          <h2 className="text-xl font-black text-gray-800 mb-2 tracking-tight">Syncing Terminal</h2>
+          <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-teal-600 animate-pulse">Lync Core Handshake</p>
         </div>
       );
     }
@@ -139,26 +167,32 @@ const App: React.FC = () => {
         />
       );
       case 'START_TRIP': return <StartTripScreen onStart={handleStartTrip} onBack={() => setCurrentScreen('HOME')} />;
-      case 'TICKETING': return <TicketScreen trip={activeTrip!} onOverview={() => setCurrentScreen('OVERVIEW')} />;
+      case 'TICKETING': return (
+        <TicketScreen 
+          trip={activeTrip!} 
+          onOverview={() => setCurrentScreen('OVERVIEW')} 
+          onSeatMap={() => { setPendingTicket(null); setCurrentScreen('SEAT_MAP'); }}
+          onIssueTicket={initiateTicketBooking}
+        />
+      );
+      case 'SEAT_MAP': return (
+        <SeatMapScreen 
+          trip={activeTrip!} 
+          selectionMode={!!pendingTicket}
+          onBack={() => { setPendingTicket(null); setCurrentScreen('TICKETING'); }} 
+          onConfirmSelection={handleFinalizeTicket}
+        />
+      );
       case 'OVERVIEW': return <TripOverviewScreen trip={activeTrip!} onEndTrip={() => setCurrentScreen('END_TRIP')} onBack={() => setCurrentScreen('TICKETING')} />;
       case 'END_TRIP': return <EndTripScreen trip={activeTrip!} onConfirm={handleEndTrip} onCancel={() => setCurrentScreen('OVERVIEW')} />;
-      default: return <div>Unknown Interface State</div>;
+      default: return <div>Interface State Unknown</div>;
     }
-  };
-
-  const screenTitles: Record<AppState, string> = {
-    'SETUP': 'Activation',
-    'HOME': device?.saccoName || 'Operator Deck',
-    'START_TRIP': 'Fleets',
-    'TICKETING': 'Revenue Deck',
-    'OVERVIEW': 'Trip Metrics',
-    'END_TRIP': 'Close Session'
   };
 
   return (
     <ErrorBoundary>
       <AppShell
-        title={screenTitles[currentScreen]}
+        title={operator ? `${operator.name} (${operator.role})` : (device?.saccoName || 'Operator Deck')}
         pendingCount={syncStatus.pendingCount}
         isSyncing={syncStatus.isSyncing}
         onBack={currentScreen !== 'HOME' && currentScreen !== 'SETUP' && currentScreen !== 'TICKETING' ? () => setCurrentScreen('HOME') : undefined}

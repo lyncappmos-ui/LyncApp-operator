@@ -1,10 +1,7 @@
-
-import { Route, Trip, MOSEvent } from '../types';
+import { Route, Trip, Seat } from '../types';
 
 /**
  * databaseClient: Handles persistent storage for offline fallback.
- * In a production environment, this would interface with Supabase 
- * using VITE_CORE_DB_URL or REACT_APP_CORE_DB_URL.
  */
 class DatabaseClient {
   private prefix = 'lync_db_';
@@ -41,6 +38,14 @@ class DatabaseClient {
 
   async saveActiveTrip(trip: Trip | null) {
     await this.set('active_trip', trip);
+  }
+
+  async getSeatMap(tripId: string): Promise<Seat[] | null> {
+    return await this.get<Seat[]>(`seats_${tripId}`);
+  }
+
+  async saveSeatMap(tripId: string, seats: Seat[]) {
+    await this.set(`seats_${tripId}`, seats);
   }
 }
 

@@ -13,9 +13,10 @@ export const mockApi = {
   getRoutes: async (): Promise<Route[]> => {
     await new Promise(r => setTimeout(r, LATENCY));
     return [
-      { id: 'r1', name: 'CBD - Westlands', standardFare: 50 },
-      { id: 'r2', name: 'CBD - Ngong', standardFare: 100 },
-      { id: 'r3', name: 'Town - Rongai', standardFare: 80 },
+      // Fix: Use origin, destination and stops to satisfy the Route interface
+      { id: 'r1', origin: 'CBD', destination: 'Westlands', stops: [], standardFare: 50 },
+      { id: 'r2', origin: 'CBD', destination: 'Ngong', stops: [], standardFare: 100 },
+      { id: 'r3', origin: 'Town', destination: 'Rongai', stops: [], standardFare: 80 },
     ];
   },
 

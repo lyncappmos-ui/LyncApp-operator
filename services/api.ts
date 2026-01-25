@@ -1,13 +1,8 @@
-import { DeviceConfig, Route, MOSEvent, Trip, CoreResponse } from '../types';
+import { DeviceConfig, Route, MOSEvent, Trip, CoreResponse, CrewMember, Vehicle, Booking, Seat, Ticket } from '../types';
 import { wrapAsCoreResponse } from './coreAdapter';
 
-/**
- * MOSCoreBridge: Secure RPC link to Hub.
- * Using standard endpoint with /api suffix for RPC commands.
- */
 const getBaseUrl = () => {
   try {
-    // Standard Vercel Environment variable access with safety fallback
     return (import.meta as any).env?.VITE_MOS_API_BASE_URL || 'https://lyncapp-mos-core.vercel.app/api';
   } catch {
     return 'https://lyncapp-mos-core.vercel.app/api';
@@ -35,7 +30,6 @@ class MOSCoreBridge {
   }
 
   private handleMessage(event: MessageEvent) {
-    // Security: Only accept messages from trusted core origins or our configured base
     if (!event.origin.includes('lync.app') && !BASE_URL.includes(event.origin)) return;
     
     const { requestId, payload, error } = event.data;
@@ -53,7 +47,6 @@ class MOSCoreBridge {
     const iframe = this.getIframe();
     const requestId = crypto.randomUUID();
 
-    // Fallback to simulation if the bridge iframe isn't ready or mounted
     if (!iframe || !iframe.contentWindow) {
       const simulatedData = await this.simulate(command, payload);
       return wrapAsCoreResponse(simulatedData as T);
@@ -88,22 +81,49 @@ class MOSCoreBridge {
   private async simulate(command: string, payload: any) {
     await new Promise(r => setTimeout(r, 600));
     switch (command) {
-      case 'getCrew': return { name: 'Verified Operator', phone: payload[0] };
+      case 'getState': 
+        return { 
+          operator: { id: 'op-1', name: 'Verified Operator', role: 'conductor' },
+          activeTrip: null,
+          vehicle: { id: 'v-1', registration: 'KDA 001X', type: 'matatu', seats: 14 }
+        };
       case 'registerDevice': return { saccoName: `${payload.saccoCode || 'LYNC'} TRANSIT` };
       case 'getRoutes': return [
-        { id: 'r1', name: 'CBD - Westlands (Local)', standardFare: 50 },
-        { id: 'r2', name: 'CBD - Ngong (Local)', standardFare: 100 },
-        { id: 'r3', name: 'Town - Rongai (Local)', standardFare: 80 },
+        { id: 'r1', origin: 'CBD', destination: 'Westlands', stops: [], standardFare: 50 },
+        { id: 'r2', origin: 'CBD', destination: 'Ngong', stops: [], standardFare: 100 },
+        { id: 'r3', origin: 'Town', destination: 'Rongai', stops: [], standardFare: 80 },
       ];
-      case 'getTerminalContext': return { activeTrip: null };
-      case 'ticket': return { success: true };
+      case 'getVehicleSeats': 
+        return Array.from({ length: payload.seats || 14 }, (_, i) => ({
+          seatNumber: `${Math.floor(i/3)+1}${['A','B','C'][i%3]}`,
+          booked: Math.random() < 0.3
+        }));
+      case 'getBookings': return [];
+      case 'ticket': return { id: crypto.randomUUID(), ...payload, timestamp: new Date().toISOString() };
+      case 'sendSms': return { success: true };
       case 'syncEvent': return true;
+      // Fix: Added simulation logic for getCrew command
+      case 'getCrew':
+        return (payload.phones || []).map((phone: string) => ({
+          id: `crew-${phone}`,
+          name: 'Verified Crew Member',
+          role: 'conductor'
+        }));
       default: return null;
     }
   }
 
-  async getCrew(phoneNumbers: string[]): Promise<CoreResponse<any>> {
-    return this.request('getCrew', phoneNumbers);
+  async getState(operatorId?: string): Promise<CoreResponse<{ operator: CrewMember; activeTrip?: Trip; vehicle?: Vehicle }>> {
+    return this.request('getState', { operatorId });
+  }
+
+  // Fix: Added missing getCrew method to MOSCoreBridge
+  async getCrew(phones: string[]): Promise<CoreResponse<CrewMember[]>> {
+    return this.request('getCrew', { phones });
+  }
+
+  async sendSms(phone: string, message: string): Promise<CoreResponse<{ success: boolean }>> {
+    return this.request('sendSms', { phone, message });
   }
 
   async registerDevice(config: DeviceConfig): Promise<CoreResponse<{ saccoName: string }>> {
@@ -114,12 +134,16 @@ class MOSCoreBridge {
     return this.request('getRoutes');
   }
 
-  async getTerminalContext(phone: string): Promise<CoreResponse<{ activeTrip: Trip | null }>> {
-    return this.request('getTerminalContext', phone);
+  async getVehicleSeats(vehicleId: string): Promise<CoreResponse<Seat[]>> {
+    return this.request('getVehicleSeats', { vehicleId });
   }
 
-  async ticket(tripId: string, phone: string, amount: number): Promise<CoreResponse<any>> {
-    return this.request('ticket', { tripId, phone, amount });
+  async getBookings(tripId: string): Promise<CoreResponse<Booking[]>> {
+    return this.request('getBookings', { tripId });
+  }
+
+  async issueTicket(tripId: string, phone: string, amount: number, seatNumber: string): Promise<CoreResponse<Ticket>> {
+    return this.request('ticket', { tripId, phone, amount, seatNumber });
   }
 
   async syncEvent(event: MOSEvent): Promise<CoreResponse<boolean>> {

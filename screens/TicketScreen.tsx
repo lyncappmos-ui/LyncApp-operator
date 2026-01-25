@@ -1,60 +1,22 @@
 import React, { useState } from 'react';
-import { Trip, Ticket } from '../types';
-import { EventQueue } from '../services/eventQueue';
+import { Trip } from '../types';
 import { coreService } from '../services/coreService';
 
 interface TicketScreenProps {
   trip: Trip;
   onOverview: () => void;
+  onSeatMap: () => void;
+  onIssueTicket: (amount: number, phone?: string) => void;
 }
 
-const TicketScreen: React.FC<TicketScreenProps> = ({ trip, onOverview }) => {
+const TicketScreen: React.FC<TicketScreenProps> = ({ trip, onOverview, onSeatMap, onIssueTicket }) => {
   const [passengerPhone, setPassengerPhone] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [status, setStatus] = useState<{ msg: string; type: 'info' | 'success' | 'error' } | null>(null);
-
+  
   const farePresets = [30, 50, 70, 100, 120, 150];
 
-  const issueTicket = async (amount: number) => {
-    if (isProcessing) return;
-    setIsProcessing(true);
-    setStatus({ msg: 'Hub Handshake...', type: 'info' });
-
-    const ticket: Ticket = {
-      id: crypto.randomUUID(),
-      tripId: trip.id,
-      amount,
-      timestamp: new Date().toISOString(),
-      passengerPhone: passengerPhone.length >= 10 ? passengerPhone : undefined,
-      paymentType: 'CASH',
-      synced: false
-    };
-
-    try {
-      // Try live registration if phone provided
-      if (ticket.passengerPhone && coreService.getStatus() === 'CONNECTED') {
-        await coreService.fetchCore(
-          (api) => api.ticket(trip.id, ticket.passengerPhone!, amount),
-          null,
-          { success: true }
-        );
-      }
-
-      EventQueue.addEvent('TICKET_ISSUE', ticket);
-      setStatus({ 
-        msg: `Ticket Recorded: KES ${amount}`, 
-        type: coreService.getStatus() === 'CONNECTED' ? 'success' : 'info' 
-      });
-      setPassengerPhone('');
-      
-      setTimeout(() => setStatus(null), 2500);
-    } catch (err) {
-      EventQueue.addEvent('TICKET_ISSUE', ticket);
-      setStatus({ msg: 'Hub Offline: Recorded Locally', type: 'error' });
-      setTimeout(() => setStatus(null), 3000);
-    } finally {
-      setIsProcessing(false);
-    }
+  const handleTicketAction = (amount: number) => {
+    onIssueTicket(amount, passengerPhone.length >= 10 ? passengerPhone : undefined);
+    setPassengerPhone('');
   };
 
   return (
@@ -68,9 +30,14 @@ const TicketScreen: React.FC<TicketScreenProps> = ({ trip, onOverview }) => {
           <p className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Route Trace</p>
           <p className="font-black text-[#1A365D] tracking-tight truncate uppercase">{trip.routeName}</p>
         </div>
-        <button onClick={onOverview} className="bg-[#1A365D] text-white p-3 rounded-xl active-scale shadow-lg shadow-blue-900/10">
-           <i className="fa-solid fa-chart-line"></i>
-        </button>
+        <div className="flex gap-2">
+          <button onClick={onSeatMap} className="bg-teal-500 text-white p-3 rounded-xl active-scale shadow-lg shadow-teal-900/10">
+             <i className="fa-solid fa-couch"></i>
+          </button>
+          <button onClick={onOverview} className="bg-[#1A365D] text-white p-3 rounded-xl active-scale shadow-lg shadow-blue-900/10">
+             <i className="fa-solid fa-chart-line"></i>
+          </button>
+        </div>
       </div>
 
       {/* Revenue Context Banner */}
@@ -108,27 +75,12 @@ const TicketScreen: React.FC<TicketScreenProps> = ({ trip, onOverview }) => {
         </div>
       </div>
 
-      {/* Status Alert Overlay-style */}
-      <div className="h-6 shrink-0 relative">
-        {status && (
-          <div className={`absolute inset-0 flex items-center justify-center rounded-lg font-black text-[9px] uppercase tracking-widest animate-in fade-in slide-in-from-bottom-2 duration-300 ${
-            status.type === 'success' ? 'text-teal-600' : 
-            status.type === 'error' ? 'text-rose-600' : 'text-blue-600'
-          }`}>
-            <span className="bg-white/80 backdrop-blur px-3 py-1 rounded-full border border-current/20 shadow-sm">
-              {status.msg}
-            </span>
-          </div>
-        )}
-      </div>
-
       {/* Fare Grid */}
       <div className="flex-1 grid grid-cols-2 gap-3 overflow-y-auto pr-1 py-1 no-scrollbar min-h-0">
         {farePresets.map(fare => (
           <button
             key={fare}
-            disabled={isProcessing}
-            onClick={() => issueTicket(fare)}
+            onClick={() => handleTicketAction(fare)}
             className="bg-white border-2 border-gray-100 hover:border-teal-500 rounded-2xl p-5 shadow-sm active-scale transition-all flex flex-col items-center group active:bg-[#1A365D]"
           >
             <span className="text-gray-400 text-[9px] font-black uppercase mb-1 group-active:text-teal-400">KES</span>
@@ -143,10 +95,10 @@ const TicketScreen: React.FC<TicketScreenProps> = ({ trip, onOverview }) => {
            Other
          </button>
          <button 
-           onClick={() => issueTicket(50)}
+           onClick={() => handleTicketAction(50)}
            className="flex-[2] bg-teal-500 text-white font-black py-4 rounded-2xl active-scale text-lg shadow-lg shadow-teal-500/20 uppercase tracking-tight"
          >
-           Issue Cash Ticket
+           Pick Seat & Issue
          </button>
       </div>
     </div>
